@@ -56,8 +56,7 @@ def create_generator(args):
             'val2017',
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side,
-            config=args.config,
-            shuffle_groups=False,
+            config=args.config
         )
     elif args.dataset_type == 'pascal':
         validation_generator = PascalVocGenerator(
@@ -65,8 +64,7 @@ def create_generator(args):
             'test',
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side,
-            config=args.config,
-            shuffle_groups=False,
+            config=args.config
         )
     elif args.dataset_type == 'csv':
         validation_generator = CSVGenerator(
@@ -74,8 +72,7 @@ def create_generator(args):
             args.classes,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side,
-            config=args.config,
-            shuffle_groups=False,
+            config=args.config
         )
     else:
         raise ValueError('Invalid data type received: {}'.format(args.dataset_type))

@@ -22,18 +22,7 @@ from ..utils.anchors import AnchorParameters
 
 def read_config_file(config_path):
     config = configparser.ConfigParser()
-
-    with open(config_path, 'r') as file:
-        config.read_file(file)
-
-    assert 'anchor_parameters' in config, \
-        "Malformed config file. Verify that it contains the anchor_parameters section."
-
-    config_keys = set(config['anchor_parameters'])
-    default_keys = set(AnchorParameters.default.__dict__.keys())
-
-    assert config_keys <= default_keys, \
-        "Malformed config file. These keys are not valid: {}".format(config_keys - default_keys)
+    config.read(config_path)
 
     return config
 

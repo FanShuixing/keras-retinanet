@@ -103,7 +103,7 @@ def _get_detections(generator, model, score_threshold=0.05, max_detections=100, 
 
         if save_path is not None:
             draw_annotations(raw_image, generator.load_annotations(i), label_to_name=generator.label_to_name)
-            draw_detections(raw_image, image_boxes, image_scores, image_labels, label_to_name=generator.label_to_name, score_threshold=score_threshold)
+            draw_detections(raw_image, image_boxes, image_scores, image_labels, label_to_name=generator.label_to_name)
 
             cv2.imwrite(os.path.join(save_path, '{}.png'.format(i)), raw_image)
 
@@ -175,10 +175,10 @@ def evaluate(
     # pickle.dump(all_annotations, open('all_annotations.pkl', 'wb'))
 
     # process detections and annotations
+#     print('utils/eval.py',generator.num_classes(),generator.size())
     for label in range(generator.num_classes()):
         if not generator.has_label(label):
             continue
-
         false_positives = np.zeros((0,))
         true_positives  = np.zeros((0,))
         scores          = np.zeros((0,))
@@ -189,7 +189,6 @@ def evaluate(
             annotations          = all_annotations[i][label]
             num_annotations     += annotations.shape[0]
             detected_annotations = []
-
             for d in detections:
                 scores = np.append(scores, d[4])
 
@@ -211,6 +210,7 @@ def evaluate(
                     true_positives  = np.append(true_positives, 0)
 
         # no annotations -> AP for this class is 0 (is this correct?)
+#         print('utils/eval.py','num_annotations',num_annotations)
         if num_annotations == 0:
             average_precisions[label] = 0, 0
             continue

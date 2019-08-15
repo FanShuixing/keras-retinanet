@@ -25,90 +25,18 @@ from six import raise_from
 import csv
 import sys
 import os.path
-from collections import OrderedDict
+import os.path as osp
+import json
+import random
 
 
-def _parse(value, function, fmt):
-    """
-    Parse a string into a value, and format a nice ValueError if it fails.
+# csv_Classes={0: 0, 1: 1}
+#visdrone
+JSON_Classes={'ignored_regions': 0, 'pedestrian': 1, 'people': 2, 'bicycle': 3, 'car': 4, 'van': 5, 'truck': 6, 'tricycle': 7, 'awning-tricycle': 8, 'bus': 9, 'motor': 10,'others': 11}
+#pascal
+# JSON_Classes={'person':0,'bird':1,'cat':2,'dog':3,'horse':4,'sheep':5,'aeroplane':6,'bicycle':7,'boat':8,'bus':9,'car':10,'motorbike':11,'train':12,'bottle':13,'chair':14,
+#               'diningtable':15,'pottedplant':16,'sofa':17,'tvmonitor':18,'cow':19}
 
-    Returns `function(value)`.
-    Any `ValueError` raised is catched and a new `ValueError` is raised
-    with message `fmt.format(e)`, where `e` is the caught `ValueError`.
-    """
-    try:
-        return function(value)
-    except ValueError as e:
-        raise_from(ValueError(fmt.format(e)), None)
-
-
-def _read_classes(csv_reader):
-    """ Parse the classes file given by csv_reader.
-    """
-    result = OrderedDict()
-    for line, row in enumerate(csv_reader):
-        line += 1
-
-        try:
-            class_name, class_id = row
-        except ValueError:
-            raise_from(ValueError('line {}: format should be \'class_name,class_id\''.format(line)), None)
-        class_id = _parse(class_id, int, 'line {}: malformed class ID: {{}}'.format(line))
-
-        if class_name in result:
-            raise ValueError('line {}: duplicate class name: \'{}\''.format(line, class_name))
-        result[class_name] = class_id
-    return result
-
-
-def _read_annotations(csv_reader, classes):
-    """ Read annotations from the csv_reader.
-    """
-    result = OrderedDict()
-    for line, row in enumerate(csv_reader):
-        line += 1
-
-        try:
-            img_file, x1, y1, x2, y2, class_name = row[:6]
-        except ValueError:
-            raise_from(ValueError('line {}: format should be \'img_file,x1,y1,x2,y2,class_name\' or \'img_file,,,,,\''.format(line)), None)
-
-        if img_file not in result:
-            result[img_file] = []
-
-        # If a row contains only an image path, it's an image without annotations.
-        if (x1, y1, x2, y2, class_name) == ('', '', '', '', ''):
-            continue
-
-        x1 = _parse(x1, int, 'line {}: malformed x1: {{}}'.format(line))
-        y1 = _parse(y1, int, 'line {}: malformed y1: {{}}'.format(line))
-        x2 = _parse(x2, int, 'line {}: malformed x2: {{}}'.format(line))
-        y2 = _parse(y2, int, 'line {}: malformed y2: {{}}'.format(line))
-
-        # Check that the bounding box is valid.
-        if x2 <= x1:
-            raise ValueError('line {}: x2 ({}) must be higher than x1 ({})'.format(line, x2, x1))
-        if y2 <= y1:
-            raise ValueError('line {}: y2 ({}) must be higher than y1 ({})'.format(line, y2, y1))
-
-        # check if the current class name is correctly present
-        if class_name not in classes:
-            raise ValueError('line {}: unknown class name: \'{}\' (classes: {})'.format(line, class_name, classes))
-
-        result[img_file].append({'x1': x1, 'x2': x2, 'y1': y1, 'y2': y2, 'class': class_name})
-    return result
-
-
-def _open_for_csv(path):
-    """ Open a file with flags suitable for csv.reader.
-
-    This is different for python2 it means with mode 'rb',
-    for python3 this means 'r' with "universal newlines".
-    """
-    if sys.version_info[0] < 3:
-        return open(path, 'rb')
-    else:
-        return open(path, 'r', newline='')
 
 
 class CSVGenerator(Generator):
@@ -119,8 +47,7 @@ class CSVGenerator(Generator):
 
     def __init__(
         self,
-        csv_data_file,
-        csv_class_file,
+        train,
         base_dir=None,
         **kwargs
     ):
@@ -135,35 +62,43 @@ class CSVGenerator(Generator):
         self.image_data  = {}
         self.base_dir    = base_dir
 
-        # Take base_dir from annotations file if not explicitly specified.
-        if self.base_dir is None:
-            self.base_dir = os.path.dirname(csv_data_file)
+
 
         # parse the provided class file
-        try:
-            with _open_for_csv(csv_class_file) as file:
-                self.classes = _read_classes(csv.reader(file, delimiter=','))
-        except ValueError as e:
-            raise_from(ValueError('invalid CSV class file: {}: {}'.format(csv_class_file, e)), None)
+        self.classes=JSON_Classes
+
 
         self.labels = {}
         for key, value in self.classes.items():
             self.labels[value] = key
 
-        # csv with img_path, x1, y1, x2, y2, class_name
-        try:
-            with _open_for_csv(csv_data_file) as file:
-                self.image_data = _read_annotations(csv.reader(file, delimiter=','), self.classes)
-        except ValueError as e:
-            raise_from(ValueError('invalid CSV annotations file: {}: {}'.format(csv_data_file, e)), None)
-        self.image_names = list(self.image_data.keys())
+        self._annopath = osp.join('%s', 'labels', '%s.json')
+        self._imgpath = osp.join('%s', 'images', '%s.jpg')
+        self.ids=list()
+        self.base_dir='/input0/visdrone_detection'
+        train_num=int(len(os.listdir(os.path.join(self.base_dir,'images')))*0.9)
+        all_list=os.listdir(os.path.join(self.base_dir,'images'))
+        #将数组顺序随机打乱
+        random.shuffle(all_list)
 
+        if train:
+
+            for each in all_list[:train_num]:
+                img_name=each.split('.')[0]
+                self.ids.append((self.base_dir,img_name))
+        else:
+            for each in all_list[train_num:]:
+                img_name=each.split('.')[0]
+                self.ids.append((self.base_dir,img_name))
+
+        
         super(CSVGenerator, self).__init__(**kwargs)
 
     def size(self):
         """ Size of the dataset.
+        这一步是对父类的重写，在父类的group_images方法中，会根据这一步的返回值构建batch_size的数据
         """
-        return len(self.image_names)
+        return len(self.ids)
 
     def num_classes(self):
         """ Number of classes in the dataset.
@@ -188,38 +123,48 @@ class CSVGenerator(Generator):
     def label_to_name(self, label):
         """ Map label to name.
         """
+#         print('*'*10,self.labels)
         return self.labels[label]
 
-    def image_path(self, image_index):
-        """ Returns the image path for image_index.
-        """
-        return os.path.join(self.base_dir, self.image_names[image_index])
+
 
     def image_aspect_ratio(self, image_index):
         """ Compute the aspect ratio for an image with image_index.
         """
         # PIL is fast for metadata
-        image = Image.open(self.image_path(image_index))
+        img_id=self.ids[image_index]
+        image = Image.open(self._imgpath%img_id)
         return float(image.width) / float(image.height)
 
     def load_image(self, image_index):
         """ Load an image at the image_index.
         """
-        return read_image_bgr(self.image_path(image_index))
+#         print('Loading images...',image_index)
+        img_id=self.ids[image_index]
+        return read_image_bgr(self._imgpath%img_id)
 
     def load_annotations(self, image_index):
         """ Load annotations for an image_index.
         """
-        path        = self.image_names[image_index]
+#         print('Loading annotations...',image_index)
+        img_id=self.ids[image_index]
+        path=self._annopath%img_id
         annotations = {'labels': np.empty((0,)), 'bboxes': np.empty((0, 4))}
+        
+        a=open(path)
+        json_info=json.load(a)
+        image_height=json_info['image_height']
+        image_width=json_info['image_width']
+        for i in range(int(json_info['num_box'])):
+            box=json_info['bboxes'][i]
+            annotations['labels']=np.concatenate((annotations['labels'],[self.name_to_label(box['label'])]))
 
-        for idx, annot in enumerate(self.image_data[path]):
-            annotations['labels'] = np.concatenate((annotations['labels'], [self.name_to_label(annot['class'])]))
-            annotations['bboxes'] = np.concatenate((annotations['bboxes'], [[
-                float(annot['x1']),
-                float(annot['y1']),
-                float(annot['x2']),
-                float(annot['y2']),
-            ]]))
+            annotations['bboxes']=np.concatenate((annotations['bboxes'],[[float(box['x_min'])*image_width,
+                                                                         float(box['y_min'])*image_height,
+                                                                          float(box['x_max'])*image_width,
+                                                                          float(box['y_max'])*image_height,
+                                                                         ]]))
+
+
 
         return annotations

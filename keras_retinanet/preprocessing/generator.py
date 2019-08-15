@@ -43,7 +43,6 @@ class Generator(keras.utils.Sequence):
     def __init__(
         self,
         transform_generator = None,
-        visual_effect_generator=None,
         batch_size=1,
         group_method='ratio',  # one of 'none', 'random', 'ratio'
         shuffle_groups=True,
@@ -70,7 +69,6 @@ class Generator(keras.utils.Sequence):
             preprocess_image       : Function handler for preprocessing an image (scaling / normalizing) for passing through a network.
         """
         self.transform_generator    = transform_generator
-        self.visual_effect_generator = visual_effect_generator
         self.batch_size             = int(batch_size)
         self.group_method           = group_method
         self.shuffle_groups         = shuffle_groups
@@ -181,31 +179,6 @@ class Generator(keras.utils.Sequence):
         """
         return [self.load_image(image_index) for image_index in group]
 
-    def random_visual_effect_group_entry(self, image, annotations):
-        """ Randomly transforms image and annotation.
-        """
-        visual_effect = next(self.visual_effect_generator)
-        # apply visual effect
-        image = visual_effect(image)
-        return image, annotations
-
-    def random_visual_effect_group(self, image_group, annotations_group):
-        """ Randomly apply visual effect on each image.
-        """
-        assert(len(image_group) == len(annotations_group))
-
-        if self.visual_effect_generator is None:
-            # do nothing
-            return image_group, annotations_group
-
-        for index in range(len(image_group)):
-            # apply effect on a single group entry
-            image_group[index], annotations_group[index] = self.random_visual_effect_group_entry(
-                image_group[index], annotations_group[index]
-            )
-
-        return image_group, annotations_group
-
     def random_transform_group_entry(self, image, annotations, transform=None):
         """ Randomly transforms image and annotation.
         """
@@ -273,6 +246,7 @@ class Generator(keras.utils.Sequence):
         """ Order the images according to self.order and makes groups of self.batch_size.
         """
         # determine the order of the images
+        print('*'*10,'group_image',self.size())
         order = list(range(self.size()))
         if self.group_method == 'random':
             random.shuffle(order)
@@ -332,9 +306,6 @@ class Generator(keras.utils.Sequence):
         # check validity of annotations
         image_group, annotations_group = self.filter_annotations(image_group, annotations_group, group)
 
-        # randomly apply visual effect
-        image_group, annotations_group = self.random_visual_effect_group(image_group, annotations_group)
-
         # randomly transform data
         image_group, annotations_group = self.random_transform_group(image_group, annotations_group)
 
@@ -346,7 +317,7 @@ class Generator(keras.utils.Sequence):
 
         # compute network targets
         targets = self.compute_targets(image_group, annotations_group)
-
+#         print('*'*10,inputs)
         return inputs, targets
 
     def __len__(self):
@@ -362,5 +333,4 @@ class Generator(keras.utils.Sequence):
         """
         group = self.groups[index]
         inputs, targets = self.compute_input_output(group)
-
         return inputs, targets

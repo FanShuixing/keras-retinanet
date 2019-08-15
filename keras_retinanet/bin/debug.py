@@ -34,10 +34,9 @@ from ..preprocessing.kitti import KittiGenerator
 from ..preprocessing.open_images import OpenImagesGenerator
 from ..utils.keras_version import check_keras_version
 from ..utils.transform import random_transform_generator
-from ..utils.visualization import draw_annotations, draw_boxes, draw_caption
+from ..utils.visualization import draw_annotations, draw_boxes
 from ..utils.anchors import anchors_for_shape, compute_gt_annotations
 from ..utils.config import read_config_file, parse_anchor_parameters
-from ..utils.image import random_visual_effect_generator
 
 
 def create_generator(args):
@@ -60,13 +59,6 @@ def create_generator(args):
         flip_y_chance=0.5,
     )
 
-    visual_effect_generator = random_visual_effect_generator(
-        contrast_range=(0.9, 1.1),
-        brightness_range=(-.1, .1),
-        hue_range=(-0.05, 0.05),
-        saturation_range=(0.95, 1.05)
-    )
-
     if args.dataset_type == 'coco':
         # import here to prevent unnecessary dependency on cocoapi
         from ..preprocessing.coco import CocoGenerator
@@ -75,7 +67,6 @@ def create_generator(args):
             args.coco_path,
             args.coco_set,
             transform_generator=transform_generator,
-            visual_effect_generator=visual_effect_generator,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side,
             config=args.config
@@ -85,7 +76,6 @@ def create_generator(args):
             args.pascal_path,
             args.pascal_set,
             transform_generator=transform_generator,
-            visual_effect_generator=visual_effect_generator,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side,
             config=args.config
@@ -95,7 +85,6 @@ def create_generator(args):
             args.annotations,
             args.classes,
             transform_generator=transform_generator,
-            visual_effect_generator=visual_effect_generator,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side,
             config=args.config
@@ -109,7 +98,6 @@ def create_generator(args):
             parent_label=args.parent_label,
             annotation_cache_dir=args.annotation_cache_dir,
             transform_generator=transform_generator,
-            visual_effect_generator=visual_effect_generator,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side,
             config=args.config
@@ -119,7 +107,6 @@ def create_generator(args):
             args.kitti_path,
             subset=args.subset,
             transform_generator=transform_generator,
-            visual_effect_generator=visual_effect_generator,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side,
             config=args.config
@@ -164,9 +151,9 @@ def parse_args(args):
     csv_parser.add_argument('annotations', help='Path to CSV file containing annotations for evaluation.')
     csv_parser.add_argument('classes',     help='Path to a CSV file containing class label mapping.')
 
+    parser.add_argument('-l', '--loop', help='Loop forever, even if the dataset is exhausted.', action='store_true')
     parser.add_argument('--no-resize', help='Disable image resizing.', dest='resize', action='store_false')
     parser.add_argument('--anchors', help='Show positive anchors on the image.', action='store_true')
-    parser.add_argument('--display-name', help='Display image name on the bottom left corner.', action='store_true')
     parser.add_argument('--annotations', help='Show annotations on the image. Green annotations have anchors, red annotations don\'t and therefore don\'t contribute to training.', action='store_true')
     parser.add_argument('--random-transform', help='Randomly transform image and annotations.', action='store_true')
     parser.add_argument('--image-min-side', help='Rescale the image so the smallest side is min_side.', type=int, default=800)
@@ -184,8 +171,7 @@ def run(generator, args, anchor_params):
         args: parseargs args object.
     """
     # display images, one at a time
-    i = 0
-    while True:
+    for i in range(generator.size()):
         # load the data
         image       = generator.load_image(i)
         annotations = generator.load_annotations(i)
@@ -193,7 +179,6 @@ def run(generator, args, anchor_params):
             # apply random transformations
             if args.random_transform:
                 image, annotations = generator.random_transform_group_entry(image, annotations)
-                image, annotations = generator.random_visual_effect_group_entry(image, annotations)
 
             # resize the image and annotations
             if args.resize:
@@ -216,28 +201,9 @@ def run(generator, args, anchor_params):
                 # result is that annotations without anchors are red, with anchors are green
                 draw_boxes(image, annotations['bboxes'][max_indices[positive_indices], :], (0, 255, 0))
 
-            # display name on the image
-            if args.display_name:
-                draw_caption(image, [0, image.shape[0]], os.path.basename(generator.image_path(i)))
-
         cv2.imshow('Image', image)
-        key = cv2.waitKey()
-
-        # note that the right and left keybindings are probably different for windows
-        # press right for next image and left for previous (linux)
-        # if you run macOS, it might be convenient using "n" and "m" key (key == 110 and key == 109)
-
-        if key == 83:
-            i = (i + 1) % generator.size()
-        if key == 81:
-            i -= 1
-            if i < 0:
-                i = generator.size() - 1
-
-        # press q or Esc to quit
-        if (key == ord('q')) or (key == 27):
+        if cv2.waitKey() == ord('q'):
             return False
-
     return True
 
 
@@ -265,7 +231,11 @@ def main(args=None):
     # create the display window
     cv2.namedWindow('Image', cv2.WINDOW_NORMAL)
 
-    run(generator, args, anchor_params=anchor_params)
+    if args.loop:
+        while run(generator, args, anchor_params=anchor_params):
+            pass
+    else:
+        run(generator, args, anchor_params=anchor_params)
 
 
 if __name__ == '__main__':
